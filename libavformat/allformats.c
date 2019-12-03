@@ -94,6 +94,7 @@ extern AVInputFormat  ff_caf_demuxer;
 extern AVOutputFormat ff_caf_muxer;
 extern AVInputFormat  ff_cavsvideo_demuxer;
 extern AVOutputFormat ff_cavsvideo_muxer;
+extern AVInputFormat  ff_ccgmav_demuxer;
 extern AVInputFormat  ff_cdg_demuxer;
 extern AVInputFormat  ff_cdxl_demuxer;
 extern AVInputFormat  ff_cine_demuxer;
