@@ -31,6 +31,8 @@
 #define CCGMAV_HEADER_SIZE 52
 
 typedef struct {
+	const AVClass *class;
+	
     uint8_t  version;
     uint32_t width;
     uint32_t height;
@@ -44,7 +46,7 @@ typedef struct {
     int      status;
     uint32_t audioBufSize;
     uint32_t videoBufSize;
-
+	int      fix_audio_channels;
 } CCGMAVContext;
 
 static int ccgmav_probe(const AVProbeData *p)
@@ -82,10 +84,19 @@ static int ccgmav_read_header(AVFormatContext *s)
     context->audio_fourcc[1] = header[45];
     context->audio_fourcc[2] = header[46];
     context->audio_fourcc[3] = header[47];
-    context->audio_channels = 8; //*(int*)&header[48]; <- bug - CasparCG now uses 8 channels, but MAV always writes 2
+    context->audio_channels = *(int*)&header[48];
     context->sample_rate = 48000;
     context->status = 0;
 
+	if (context->fix_audio_channels == 1) {
+		context->audio_channels = 8;
+	}
+	if (context->field_mode != 3) {
+		context->fps *= 2;
+	}
+
+	av_log(s, AV_LOG_INFO, "field mode %d, FPS %f, audio channels %d\n", context->field_mode, context->fps, context->audio_channels);
+	
     ast = avformat_new_stream(s, NULL);
     avpriv_set_pts_info(ast, 64, 1, context->sample_rate);
     ast->codecpar->codec_id = AV_CODEC_ID_PCM_S32LE;
@@ -102,6 +113,11 @@ static int ccgmav_read_header(AVFormatContext *s)
     vst->codecpar->codec_id   = AV_CODEC_ID_MJPEG;
     vst->codecpar->width  = context->width;
     vst->codecpar->height = context->height;
+	if (context->field_mode == 1) {
+		vst->codecpar->field_order = AV_FIELD_BB;
+	} else if (context->field_mode == 2) {
+		vst->codecpar->field_order = AV_FIELD_TT;
+	}
 
     strcpy(mav_filename, s->filename);
     mav_filename[strlen(mav_filename) - 3] = 'm';
@@ -166,6 +182,20 @@ static int ccgmav_read_packet(AVFormatContext *s, AVPacket *pkt)
     return ret;
 }
 
+static const AVOption options[] = {
+	{ "fix_audio_channels", "fix audio channels (MAV 10)", offsetof(CCGMAVContext, fix_audio_channels),
+	  AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, AV_OPT_FLAG_DECODING_PARAM },
+	{ NULL },
+};
+
+static const AVClass demuxer_class = {
+    .class_name = "CCGMAV demuxer",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_DEMUXER,
+};
+
 AVInputFormat ff_ccgmav_demuxer = {
     .name           = "ccgmav",
     .long_name      = NULL_IF_CONFIG_SMALL("CasparCG MAV"),
@@ -173,5 +203,6 @@ AVInputFormat ff_ccgmav_demuxer = {
     .read_probe     = ccgmav_probe,
     .read_header    = ccgmav_read_header,
     .read_packet    = ccgmav_read_packet,
+	.priv_class     = &demuxer_class,
 };
 #endif
